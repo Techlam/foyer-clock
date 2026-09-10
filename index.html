@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foyer clock</title>
+<style>
+  :root {
+    --bg: #14233a;
+    --ink: #f3eee3;
+    --muted: #9fb0c8;
+    --accent: #e8b25b;
+    --panel: #1d2f4b;
+    --line: #3a5075;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    cursor: none;
+  }
+  body.awake { cursor: default; }
+
+  main { text-align: center; width: 100%; padding: 4vh 6vw; }
+  #clock {
+    font-size: clamp(64px, 22vw, 320px);
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  #clock small {
+    font-size: 0.32em; font-weight: 400; color: var(--muted);
+    margin-left: 0.15em; vertical-align: 0.6em;
+  }
+  #date { margin-top: 2vh; font-size: clamp(16px, 3vw, 40px); color: var(--muted); }
+  #message {
+    margin: 6vh auto 0; max-width: 24ch;
+    font-size: clamp(24px, 5.5vw, 84px); font-weight: 500; line-height: 1.15; min-height: 1.2em;
+  }
+  #countdown {
+    margin-top: 2vh; font-size: clamp(40px, 12vw, 200px); font-weight: 300;
+    color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  #countdown:empty { display: none; }
+  #countdown.urgent { animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.55; } }
+  @media (prefers-reduced-motion: reduce) { #countdown.urgent { animation: none; } }
+
+  /* Settings */
+  #gear {
+    position: fixed; top: 16px; right: 16px;
+    background: none; border: 1px solid var(--muted); color: var(--ink);
+    border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 14px;
+    opacity: 0; transition: opacity .2s; cursor: pointer;
+  }
+  body.awake #gear { opacity: 1; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #settings {
+    position: fixed; top: 60px; right: 16px;
+    width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 76px); overflow: auto;
+    background: var(--panel); color: var(--ink);
+    border-radius: 10px; padding: 18px; display: none;
+    font-size: 15px; line-height: 1.4;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35);
+  }
+  #settings.open { display: block; }
+  #settings h2 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; color: var(--muted); }
+  #settings h2:first-child { margin-top: 0; }
+  #settings label.field { display: block; margin: 10px 0 4px; color: var(--muted); }
+  #settings input[type=text], #settings input[type=number], #settings input[type=time] {
+    padding: 8px 10px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit;
+  }
+  #settings input[type=text] { width: 100%; }
+  #settings input[type=number] { width: 90px; }
+  #settings input[type=time] { width: 100%; }
+  #settings input[type=time]:disabled { opacity: .35; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td, th { padding: 6px 4px; text-align: left; }
+  th { font-weight: 500; color: var(--muted); font-size: 13px; }
+  td.day { width: 4.5em; color: var(--ink); }
+  td.slot { }
+  .slot label { display: flex; align-items: center; gap: 6px; }
+  .slot input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+
+  .row { display: flex; gap: 8px; margin-top: 18px; }
+  .row button {
+    flex: 1; padding: 10px; border-radius: 6px; font: inherit; cursor: pointer;
+    border: 1px solid var(--accent); background: var(--accent); color: var(--bg); font-weight: 600;
+  }
+  .row button.quiet { background: none; color: var(--ink); border-color: var(--muted); }
+  p.hint { margin: 14px 0 0; color: var(--muted); font-size: 13px; }
+  #next { margin-top: 10px; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<main>
+  <div id="clock"></div>
+  <div id="date"></div>
+  <div id="message"></div>
+  <div id="countdown"></div>
+</main>
+
+<button id="gear" type="button" aria-controls="settings" aria-expanded="false">Settings</button>
+
+<div id="settings" role="dialog" aria-label="Display settings">
+  <h2>Messages</h2>
+  <label class="field" for="beforeInput">While counting down</label>
+  <input id="beforeInput" type="text" maxlength="60">
+  <label class="field" for="afterInput">At all other times</label>
+  <input id="afterInput" type="text" maxlength="60">
+
+  <h2>Countdown</h2>
+  <label class="field" for="leadInput">Start the countdown this many minutes before each time</label>
+  <input id="leadInput" type="number" min="1" max="180" step="1">
+
+  <h2>Weekly times</h2>
+  <p class="hint" style="margin:0 0 8px">Tick a slot and set the time. Up to three per day.</p>
+  <table id="schedule"></table>
+  <div id="next"></div>
+
+  <div class="row">
+    <button id="apply" type="button">Save</button>
+    <button id="copy" type="button" class="quiet">Copy link</button>
+  </div>
+  <p class="hint">Saving stores the settings on this screen and in the web address, so the copied link opens with the same schedule anywhere. Press F for full screen.</p>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const STORE = 'foyer-clock-config';
+
+  const defaults = {
+    before: 'Please move into the auditorium',
+    after: 'Welcome',
+    lead: 5,
+    // 7 days (Sun..Sat), 3 slots each: { on, time }
+    days: Array.from({ length: 7 }, (_, d) => [
+      { on: d === 0, time: '10:30' },
+      { on: false, time: '' },
+      { on: false, time: '' }
+    ])
+  };
+
+  // Config encoding for the URL: JSON -> URL-safe base64
+  const enc = obj => btoa(unescape(encodeURIComponent(JSON.stringify(obj))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const dec = str => {
+    try {
+      const b = str.replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(decodeURIComponent(escape(atob(b))));
+    } catch { return null; }
+  };
+
+  function load() {
+    const fromUrl = dec(new URLSearchParams(location.search).get('c') || '');
+    let fromStore = null;
+    try { fromStore = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch {}
+    const c = fromUrl || fromStore || {};
+    return {
+      before: c.before ?? defaults.before,
+      after: c.after ?? defaults.after,
+      lead: Number(c.lead) || defaults.lead,
+      days: Array.isArray(c.days) && c.days.length === 7 ? c.days : defaults.days
+    };
+  }
+  let state = load();
+
+  // Build the schedule table
+  const table = $('schedule');
+  table.innerHTML = '<tr><th></th><th>Time 1</th><th>Time 2</th><th>Time 3</th></tr>';
+  // Show Mon..Sun order in the UI
+  [1,2,3,4,5,6,0].forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="day">${DAYS[d]}</td>` + [0,1,2].map(s => `
+      <td class="slot"><label>
+        <input type="checkbox" data-d="${d}" data-s="${s}" aria-label="${DAYS[d]} time ${s+1} on">
+        <input type="time" step="60" data-d="${d}" data-s="${s}" aria-label="${DAYS[d]} time ${s+1}">
+      </label></td>`).join('');
+    table.appendChild(tr);
+  });
+  table.addEventListener('change', e => {
+    if (e.target.type === 'checkbox') {
+      const t = e.target.parentElement.querySelector('input[type=time]');
+      t.disabled = !e.target.checked;
+      if (e.target.checked && !t.value) t.value = '10:30';
+    }
+  });
+
+  function fillForm() {
+    $('beforeInput').value = state.before;
+    $('afterInput').value = state.after;
+    $('leadInput').value = state.lead;
+    table.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      const slot = state.days[cb.dataset.d][cb.dataset.s];
+      cb.checked = !!slot.on;
+      const t = cb.parentElement.querySelector('input[type=time]');
+      t.value = slot.time || '';
+      t.disabled = !slot.on;
+    });
+  }
+  function readForm() {
+    const days = Array.from({ length: 7 }, () => [0,1,2].map(() => ({ on: false, time: '' })));
+    table.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      const t = cb.parentElement.querySelector('input[type=time]');
+      days[cb.dataset.d][cb.dataset.s] = { on: cb.checked && !!t.value, time: t.value };
+    });
+    return {
+      before: $('beforeInput').value.trim(),
+      after: $('afterInput').value.trim(),
+      lead: Math.max(1, Number($('leadInput').value) || defaults.lead),
+      days
+    };
+  }
+  fillForm();
+
+  // Find the next enabled target within the next 7 days
+  function nextTarget(now) {
+    for (let offset = 0; offset < 8; offset++) {
+      const day = new Date(now); day.setDate(now.getDate() + offset); day.setHours(0,0,0,0);
+      const cands = state.days[day.getDay()]
+        .filter(s => s.on && s.time)
+        .map(s => { const [h,m] = s.time.split(':').map(Number); const t = new Date(day); t.setHours(h, m, 0, 0); return t; })
+        .filter(t => t > now)
+        .sort((a,b) => a - b);
+      if (cands.length) return cands[0];
+    }
+    return null;
+  }
+
+  const pad = n => String(n).padStart(2,'0');
+  const fmtCountdown = ms => {
+    const s = Math.ceil(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = s%60;
+    return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+  };
+  const fmtTime = d => { let h = d.getHours(); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${pad(d.getMinutes())}${ap}`; };
+
+  function tick() {
+    const now = new Date();
+    let h = now.getHours(); const ampm = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12;
+    $('clock').innerHTML = `${h}:${pad(now.getMinutes())}<small>${ampm}</small>`;
+    $('date').textContent = now.toLocaleDateString(undefined, { weekday:'long', day:'numeric', month:'long' });
+
+    const target = nextTarget(now);
+    const cd = $('countdown');
+    const remaining = target ? target - now : -1;
+
+    if (target && remaining <= state.lead * 60000) {
+      $('message').textContent = state.before;
+      cd.textContent = fmtCountdown(remaining);
+      cd.classList.toggle('urgent', remaining <= 60000);
+    } else {
+      $('message').textContent = state.after;
+      cd.textContent = '';
+      cd.classList.remove('urgent');
+    }
+
+    $('next').textContent = target
+      ? `Next countdown: ${DAYS[target.getDay()]} ${fmtTime(target)}, starting ${state.lead} min before.`
+      : 'No times are ticked, so the countdown will never show.';
+  }
+  tick();
+  setInterval(tick, 250);
+
+  // Settings panel behaviour
+  const gear = $('gear'), panel = $('settings');
+  let sleepTimer;
+  function wake() {
+    document.body.classList.add('awake');
+    clearTimeout(sleepTimer);
+    sleepTimer = setTimeout(() => {
+      if (!panel.classList.contains('open')) document.body.classList.remove('awake');
+    }, 4000);
+  }
+  ['mousemove','keydown','touchstart'].forEach(e => addEventListener(e, wake, { passive: true }));
+  const closePanel = () => { panel.classList.remove('open'); gear.setAttribute('aria-expanded','false'); };
+  gear.addEventListener('click', () => {
+    const open = panel.classList.toggle('open');
+    gear.setAttribute('aria-expanded', open);
+  });
+
+  const buildUrl = () => `${location.origin}${location.pathname}?c=${enc(state)}`;
+
+  function save() {
+    state = readForm();
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {}
+    history.replaceState(null, '', buildUrl());
+    fillForm();
+    tick();
+  }
+  $('apply').addEventListener('click', () => { save(); closePanel(); });
+  $('copy').addEventListener('click', async () => {
+    save();
+    try {
+      await navigator.clipboard.writeText(buildUrl());
+      $('copy').textContent = 'Copied';
+      setTimeout(() => $('copy').textContent = 'Copy link', 1500);
+    } catch { prompt('Copy this link:', buildUrl()); }
+  });
+
+  addEventListener('keydown', e => {
+    if (e.target.matches('input')) return;
+    if (e.key.toLowerCase() === 'f') {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    }
+    if (e.key === 'Escape') closePanel();
+  });
+})();
+</script>
+</body>
+</html>
