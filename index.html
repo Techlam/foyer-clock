@@ -26,9 +26,13 @@
   }
   body.awake { cursor: default; }
 
-  main { text-align: center; width: 100%; padding: 4vh 6vw; }
+  :root { --u: 1vmin; }           /* scale unit, reduced by script if content overflows */
+  main {
+    text-align: center; width: 100%;
+    padding: 6vh 8vw;             /* safe margin so TV overscan doesn't clip the edges */
+  }
   #clock {
-    font-size: clamp(64px, 22vw, 320px);
+    font-size: calc(var(--u) * 26);
     font-weight: 300;
     letter-spacing: -0.02em;
     line-height: 1;
@@ -38,13 +42,13 @@
     font-size: 0.32em; font-weight: 400; color: var(--muted);
     margin-left: 0.15em; vertical-align: 0.6em;
   }
-  #date { margin-top: 2vh; font-size: clamp(16px, 3vw, 40px); color: var(--muted); }
+  #date { margin-top: 1.5vh; font-size: calc(var(--u) * 4); color: var(--muted); }
   #message {
-    margin: 6vh auto 0; max-width: 24ch;
-    font-size: clamp(24px, 5.5vw, 84px); font-weight: 500; line-height: 1.15; min-height: 1.2em;
+    margin: 4vh auto 0; max-width: 24ch;
+    font-size: calc(var(--u) * 6.5); font-weight: 500; line-height: 1.15; min-height: 1.2em;
   }
   #countdown {
-    margin-top: 2vh; font-size: clamp(40px, 12vw, 200px); font-weight: 300;
+    margin-top: 1.5vh; font-size: calc(var(--u) * 15); font-weight: 300;
     color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1;
   }
   #countdown:empty { display: none; }
@@ -272,6 +276,33 @@
   }
   tick();
   setInterval(tick, 250);
+
+  // Shrink the scale unit until everything fits inside the viewport
+  const main = document.querySelector('main');
+  function fit() {
+    let u = 1;
+    document.documentElement.style.setProperty('--u', u + 'vmin');
+    for (let i = 0; i < 20 && main.scrollHeight > innerHeight; i++) {
+      u -= 0.04;
+      document.documentElement.style.setProperty('--u', u + 'vmin');
+    }
+  }
+  fit();
+  addEventListener('resize', fit);
+  document.fonts?.ready.then(fit);
+
+  // Check GitHub for a new version every 10 minutes and reload if the file has changed
+  let etag = null;
+  async function checkForUpdate() {
+    try {
+      const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+      const tag = r.headers.get('etag') || r.headers.get('last-modified');
+      if (etag && tag && tag !== etag) location.reload();
+      etag = tag || etag;
+    } catch {}
+  }
+  checkForUpdate();
+  setInterval(checkForUpdate, 10 * 60 * 1000);
 
   // Settings panel behaviour
   const gear = $('gear'), panel = $('settings');
